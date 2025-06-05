@@ -16,6 +16,7 @@ following cloud platforms...
 * GCP (Google Cloud Platform)
 * OCI (Oracle Cloud Infrastructure)
 * NoCloud
+* Generic (autodetected, based on what boostrap system supports)
 
 Each image's name contains the Alpine version release, architecture, firmware,
 bootstrap, and image revision; a YAML metadata file containing these details
@@ -30,7 +31,7 @@ and more is downloadable.
 | release | Alpine release (_`x.y.z`_ or _`YYYYMMDD`_ for edge) |
 | arch | architecture (`aarch64` or `x86_64`) |
 | firmware | boot mode (`bios` or `uefi`) |
-| bootstrap | initial bootstrap system (`tiny` = Tiny Cloud) |
+| bootstrap | bootstrap system (`tiny` = Tiny Cloud or `cloudinit` for cloud-init) |
 | cloud | provider short name (`aws`) |
 | revision | image revision number |
 | built | image build timestamp |
@@ -118,7 +119,7 @@ _We manage the credentials for publishing official Alpine images with an
 usage: build [-h] [--debug] [--clean] [--pad-uefi-bin-arch ARCH [ARCH ...]]
          [--custom DIR [DIR ...]] [--skip KEY [KEY ...]] [--only KEY [KEY ...]]
          [--revise] [--use-broker] [--no-color] [--parallel N]
-         [--vars FILE [FILE ...]]
+         [--vars FILE [FILE ...]] [--disable STEP [STEP] ...]
          {configs,state,rollback,local,upload,import,sign,publish,release}
 
 positional arguments:   (build up to and including this step)

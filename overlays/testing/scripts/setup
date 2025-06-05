@@ -34,7 +34,8 @@ setup_builder() {
         dosfstools \
         gettext \
         lsblk \
-        parted
+        parted \
+        sgdisk
 }
 
 make_filesystem() {
@@ -48,7 +49,13 @@ make_filesystem() {
         die "Block device '$DEVICE' is not blank"
     fi
 
-    if [ "$FIRMWARE" = uefi ]; then
+    if [ "$FIRMWARE" = hybrid ]; then
+        #
+        sgdisk --clear \
+            --new 4::+512K --typecode 4:ef02 --change-name 4:'BIOS' \
+            --new 1::+512K --typecode 1:ef00 --change-name 1:'EFI' \
+            --new 2::-0 --typecode 2:8300 --change-name 2:'/'
+    elif [ "$FIRMWARE" = uefi ]; then
         # EFI partition isn't optimally aligned, but is rarely used after boot
         parted "$DEVICE" -- \
             mklabel gpt \
@@ -56,7 +63,8 @@ make_filesystem() {
             mkpart / ext4 1MiB 100% \
             set 1 esp on \
             unit MiB print
-
+    fi
+    if [ "$FIRMWARE" = hybrid ] || [ "$FIRMWARE" = uefi ]; then
         root_dev="${DEVICE}2"
         mkfs.fat -n EFI "${DEVICE}1"
     fi
@@ -132,11 +140,11 @@ install_bootloader() {
 
     chroot "$TARGET" /sbin/mkinitfs "$kernel"
 
-    if [ "$FIRMWARE" = uefi ]; then
-        install_grub_efi
-    else
-        install_extlinux
-    fi
+    case "$FIRMWARE" in
+        hybrid) install_grub_hybrid ;;
+        uefi)   install_grub_efi ;;
+        *)      install_extlinux ;;
+    esac
 }
 
 install_extlinux() {
