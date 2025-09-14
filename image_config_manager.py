@@ -1,5 +1,6 @@
 # vim: ts=4 et:
 
+import sys
 import itertools
 import logging
 import pyhocon
@@ -27,6 +28,7 @@ class ImageConfigManager():
         self.yaml = YAML()
         self.yaml.register_class(ImageConfig)
         self.yaml.explicit_start = True
+        self.yaml.width = sys.maxsize
         # hide !ImageConfig tag from Packer
         self.yaml.representer.org_represent_mapping = self.yaml.representer.represent_mapping
         self.yaml.representer.represent_mapping = self._strip_yaml_tag_type
