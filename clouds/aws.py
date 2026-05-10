@@ -245,7 +245,7 @@ class AWSCloudAdapter(CloudAdapterInterface):
         snapshot.delete()
 
     # publish an image
-    def publish_image(self, ic):
+    def publish_image(self, ic, not_regions=[]):
         log = logging.getLogger('publish')
 
         source = self._get_this_image(ic)
@@ -294,6 +294,10 @@ class AWSCloudAdapter(CloudAdapterInterface):
         for r in regions.keys():
             if not regions[r]:
                 log.warning('Skipping unsubscribed AWS region %s', r)
+                continue
+
+            if r in not_regions:
+                log.warning(f'Explicitly not region %s', r)
                 continue
 
             image = self._get_this_image(ic, region=r)

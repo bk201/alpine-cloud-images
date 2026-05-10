@@ -23,9 +23,9 @@ register(
 
 
 # using a credential provider is optional, set across all adapters
-def set_credential_provider(debug=False):
+def set_credential_provider(debug=False, not_regions=[]):
     from .identity_broker_client import IdentityBrokerClient
-    cred_provider = IdentityBrokerClient(debug=debug)
+    cred_provider = IdentityBrokerClient(debug=debug, not_regions=not_regions)
     for adapter in ADAPTERS.values():
         adapter.cred_provider = cred_provider
 
@@ -41,8 +41,8 @@ def delete_image(config, image_id):
     return ADAPTERS[config.cloud].delete_image(image_id)
 
 
-def publish_image(config):
-    return ADAPTERS[config.cloud].publish_image(config)
+def publish_image(config, not_regions=[]):
+    return ADAPTERS[config.cloud].publish_image(config, not_regions)
 
 # supported actions
 def actions(config):

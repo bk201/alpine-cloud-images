@@ -35,5 +35,5 @@ class CloudAdapterInterface:
     def delete_image(self, config, image_id):
         raise NotImplementedError
 
-    def publish_image(self, config):
+    def publish_image(self, config, not_regions=[]):
         raise NotImplementedError

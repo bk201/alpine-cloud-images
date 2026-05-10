@@ -68,6 +68,7 @@ parser = argparse.ArgumentParser(description=NOTE)
 parser.add_argument('--debug', action='store_true', help='enable debug output')
 parser.add_argument('--cloud', choices=CLOUDS, required=True, help='cloud provider')
 parser.add_argument('--region', help='specific region, instead of all regions')
+parser.add_argument('--not-regions', nargs='+', help='skip problematic region', default=[])
 parser.add_argument(
     '--use-broker', action='store_true',
     help='use the identity broker to get credentials')
@@ -84,10 +85,10 @@ log.debug(args)
 
 # set up credential provider, if we're going to use it
 if args.use_broker:
-    clouds.set_credential_provider(debug=args.debug)
+    clouds.set_credential_provider(debug=args.debug, not_regions=args.not_regions)
 
 # what region(s)?
-regions = clouds.ADAPTERS[args.cloud].regions
+regions = set(clouds.ADAPTERS[args.cloud].regions) - set(args.not_regions)
 if args.region:
     if args.region not in regions:
         log.error('invalid region: %s', args.region)

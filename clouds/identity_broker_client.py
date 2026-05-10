@@ -25,7 +25,7 @@ class IdentityBrokerClient:
     _DEFAULT_ACCOUNT = 'alpine-amis-user'
     _LOGFORMAT = '%(name)s - %(levelname)s - %(message)s'
 
-    def __init__(self, endpoint=None, key=None, account=None, debug=False):
+    def __init__(self, endpoint=None, key=None, account=None, debug=False, not_regions=[]):
         # log to STDOUT so that it's not all red when executed by Packer
         self._logger = logging.getLogger('identity-broker')
         self._logger.setLevel(logging.DEBUG if debug else logging.INFO)
@@ -39,6 +39,7 @@ class IdentityBrokerClient:
         self._account = account or self._DEFAULT_ACCOUNT
         if not self._key:
             raise Exception('No identity broker key found')
+        self._not_regions = not_regions
 
         self._headers = {
             'Accept': 'application/vnd.broker.v2+json',
@@ -114,7 +115,7 @@ class IdentityBrokerClient:
         out = {}
 
         for region in self._get(self.get_credentials_url(vendor)):
-            if region['enabled']:
+            if region['enabled'] and region['name'] not in self._not_regions:
                 out[region['name']] = region['credentials_url']
 
             if region['default']:

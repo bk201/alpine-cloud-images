@@ -19,6 +19,10 @@ variable "DEBUG" {
 variable "USE_BROKER" {
   default = 0
 }
+# regions to skip publishing
+variable "NOT_REGIONS" {
+  default = null
+}
 
 # tuneable QEMU VM parameters, based on perfomance of the local machine;
 # overrideable via build script --vars parameter referencing a Packer
@@ -45,6 +49,7 @@ locals {
 
   debug_arg   = var.DEBUG == 0 ? "" : "--debug"
   broker_arg  = var.USE_BROKER == 0 ? "" : "--use-broker"
+  not-regions_arg = var.NOT_REGIONS == null ? "" : "--not-regions ${var.NOT_REGIONS}"
 
   # randomly generated password
   password = uuidv4()
@@ -204,7 +209,7 @@ build {
     content {
       only = [ "qemu.${B.key}", "null.${B.key}" ]
       inline = [ for action in local.actions:
-        "./cloud_helper.py ${action} ${local.debug_arg} ${local.broker_arg} ${B.key}" if contains(B.value.actions, action)
+        "./cloud_helper.py ${action} ${local.debug_arg} ${local.broker_arg} ${local.not-regions_arg} ${B.key}" if contains(B.value.actions, action)
       ]
     }
   }

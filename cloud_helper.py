@@ -48,6 +48,7 @@ parser.add_argument('--debug', action='store_true', help='enable debug output')
 parser.add_argument(
     '--use-broker', action='store_true',
     help='use the identity broker to get credentials')
+parser.add_argument('--not-regions', metavar='REGION_LIST', default="")
 parser.add_argument('action', choices=ACTIONS)
 parser.add_argument('image_keys', metavar='IMAGE_KEY', nargs='+')
 args = parser.parse_args()
@@ -60,9 +61,11 @@ console.setFormatter(logging.Formatter(LOGFORMAT))
 log.addHandler(console)
 log.debug(args)
 
+not_regions = args.not_regions.split(',')
+
 # set up credential provider, if we're going to use it
 if args.use_broker:
-    clouds.set_credential_provider(debug=args.debug)
+    clouds.set_credential_provider(debug=args.debug, not_regions=not_regions)
 
 # load build configs
 configs = ImageConfigManager(
@@ -95,7 +98,7 @@ for image_key in args.image_keys:
         image_config.sign_image()
 
     elif args.action == 'publish' and 'publish' in clouds.actions(image_config):
-        clouds.publish_image(image_config)
+        clouds.publish_image(image_config, not_regions)
 
     elif args.action == 'release':
         image_config.release_image()

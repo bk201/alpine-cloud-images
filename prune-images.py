@@ -71,6 +71,9 @@ parser.add_argument('--debug', action='store_true', help='enable debug output')
 parser.add_argument('--really', action='store_true', help='really prune images')
 parser.add_argument('--cloud', choices=CLOUDS, required=True, help='cloud provider')
 parser.add_argument('--region', help='specific region, instead of all regions')
+parser.add_argument(
+    '--not-regions', nargs="+", metavar='REGION', default=[], help="don't publish to these regions"
+)
 # what to prune...
 parser.add_argument('--bad-name', action='store_true')
 parser.add_argument('--private', action='store_true')
@@ -96,7 +99,7 @@ log.debug(args)
 
 # set up credential provider, if we're going to use it
 if args.use_broker:
-    clouds.set_credential_provider(debug=args.debug)
+    clouds.set_credential_provider(debug=args.debug, not_regions=args.not_regions)
 
 # what region(s)?
 regions = clouds.ADAPTERS[args.cloud].regions

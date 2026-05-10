@@ -254,6 +254,10 @@ parser.add_argument(
     '--disable', metavar='STEP', nargs='+', action=remove_dupe_args(),
     choices=DISABLEABLE, default=[], help='disable optional steps'
 )
+# don't publish to these regions
+parser.add_argument(
+    '--not-regions', nargs="+", metavar='REGION', help="don't publish to these regions"
+)
 args = parser.parse_args()
 
 log = logging.getLogger('build')
@@ -275,7 +279,7 @@ if 'import' in args.disable and 'publish' not in args.disable:
 
 # set up credential provider, if we're going to use it
 if args.use_broker:
-    clouds.set_credential_provider(debug=args.debug)
+    clouds.set_credential_provider(debug=args.debug, not_regions=args.not_regions)
 
 ### Setup Configs
 
@@ -349,6 +353,9 @@ if args.use_broker:
 if args.debug:
     # do not add '-debug', it will pause between steps
     packer_cmd += ['-var', 'DEBUG=1']
+
+if args.not_regions:
+    packer_cmd += ['-var', 'NOT_REGIONS=' + ','.join(args.not_regions)]
 
 for var_file in args.vars:
     packer_cmd.append(f"-var-file={var_file}")
