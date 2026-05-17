@@ -1,0 +1,58 @@
+name: Publish Image on Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-kvm
+
+      - name: Install Packer
+        env:
+          PACKER_VERSION: "1.15.3"
+        run: |
+          mkdir -p /tmp/packer
+          cd /tmp/packer
+          curl -fsSL "https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PACKER_VERSION}_linux_amd64.zip" \
+            -o packer.zip
+          unzip packer.zip
+          sudo mv packer /usr/local/bin/packer
+          packer version
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Build image
+        run: ./build local --only 3.23 x86_64 bios cloudinit vm generic
+
+      - name: Compress and rename artifact
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          IMAGE_SRC="work/images/generic/3.23.4-x86_64-bios-cloudinit-vm-generic/image.qcow2"
+          IMAGE_OUT="3.23.4-x86_64-bios-cloudinit-vm-generic-${RELEASE_TAG}.img"
+          cp "${IMAGE_SRC}" "${IMAGE_OUT}"
+          gzip -9 "${IMAGE_OUT}"
+          sha256sum "${IMAGE_OUT}.gz" > "${IMAGE_OUT}.gz.sha256"
+          echo "ARTIFACT=${IMAGE_OUT}.gz" >> "$GITHUB_ENV"
+          echo "ARTIFACT_SHA256=${IMAGE_OUT}.gz.sha256" >> "$GITHUB_ENV"
+
+      - name: Upload image to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.ARTIFACT }}
+            ${{ env.ARTIFACT_SHA256 }}
