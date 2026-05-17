@@ -1,5 +1,7 @@
 # Alpine Linux Cloud Image Builder
 
+Forked from https://gitlab.alpinelinux.org/alpine/cloud/alpine-cloud-images
+
 This repository contains the code and and configs for the build system used to
 create official Alpine Linux images for various cloud providers, in various
 configurations.  This build system is flexible, enabling others to build their
