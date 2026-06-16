@@ -78,7 +78,7 @@ source qemu alpine {
   # build environment
   boot_command = [
     "root<enter>",
-    "setup-interfaces<enter><enter><enter><enter>",
+    "setup-interfaces<enter><enter><enter><enter><enter>",
     "ifup eth0<enter><wait${var.qemu.cmd_wait}>",
     "setup-sshd openssh<enter><wait${var.qemu.cmd_wait}>",
     "echo PermitRootLogin yes >> /etc/ssh/sshd_config<enter>",

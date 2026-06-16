@@ -10,3 +10,4 @@
 /work/
 releases*yaml
 /*.yaml
+__pycache__
