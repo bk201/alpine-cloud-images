@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 from image_tags import DictObj
 
 
-def run(cmd, log, errmsg=None, errvals=[], err_ok=False, shell=False):
+def run(cmd, log, errmsg=None, errvals=[], err_ok=False, shell=False, cwd=None):
     # ensure command and error values are lists of strings
     errvals = [str(ev) for ev in errvals]
     if not shell:
@@ -22,7 +22,15 @@ def run(cmd, log, errmsg=None, errvals=[], err_ok=False, shell=False):
         cmd = str(cmd)
 
     log.debug('COMMAND: %s', cmd)
-    p = Popen(cmd, stdout=PIPE, stdin=PIPE, stderr=PIPE, encoding='utf8', shell=shell)
+    p = Popen(
+        cmd,
+        stdout=PIPE,
+        stdin=PIPE,
+        stderr=PIPE,
+        encoding='utf8',
+        shell=shell,
+        cwd=cwd,
+    )
     out, err = p.communicate()
     if p.returncode:
         if errmsg:

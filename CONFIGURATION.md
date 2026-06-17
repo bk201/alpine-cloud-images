@@ -205,9 +205,16 @@ The sum of this array is the size of the image disk, specified in MiB; this
 allows different dimension variants to "bump up" the size of the image if
 extra space is needed.
 
+For `raw.tar.gz` images, the converted raw disk is resized to a whole number
+of GiB based on this resolved MiB value, rounded up with a minimum of `1G`.
+
 ### `image_format` string
 
 The format/extension of the disk image, i.e. `qcow2`, `vhd`, or `raw`.
+
+The `raw.tar.gz` format is used for GCP image imports.  It is produced by
+converting the QCOW2 build output to raw, resizing that raw disk according to
+`disk_size`, and archiving it in GNU tar format.
 
 ### `image_format_opts` string
 
@@ -297,6 +304,11 @@ set to `null`, for aarch64, we use `virt`.
 
 Additional QEMU arguments.  For x86_64, this is set to `null`; but aarch64
 requires several additional arguments to start an operational VM.
+
+The build system appends its own direct-kernel boot arguments for local QEMU
+builds.  These boot arguments use cached Alpine virt ISO kernel/initramfs
+artifacts from `work/boot/` and an apkovl served from `work/apkovl/` to enable
+SSH provisioning.
 
 ### `qemu.firmware` string
 

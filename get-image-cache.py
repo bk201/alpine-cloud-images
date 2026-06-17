@@ -32,6 +32,7 @@ import logging
 import re
 import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from ruamel.yaml import YAML
 
 import clouds
@@ -68,6 +69,7 @@ parser = argparse.ArgumentParser(description=NOTE)
 parser.add_argument('--debug', action='store_true', help='enable debug output')
 parser.add_argument('--cloud', choices=CLOUDS, required=True, help='cloud provider')
 parser.add_argument('--region', help='specific region, instead of all regions')
+parser.add_argument('--parallel', metavar='N', type=int, default=1, help='collect N regions in parallel')
 parser.add_argument('--not-regions', nargs='+', help='skip problematic region', default=[])
 parser.add_argument(
     '--use-broker', action='store_true',
@@ -103,18 +105,17 @@ filters = {
     ]
 }
 
-data = dictfactory()
-now = time.gmtime()
-
-for region in sorted(regions):
+def collect_region(region):
     # TODO: make more generic if we need to do this for other clouds someday
     ec2r = clouds.ADAPTERS[args.cloud].session(region).resource('ec2')
     images = sorted(ec2r.images.filter(**filters), key=lambda k: k.creation_date)
     log.info(f'--- {region} : {len(images)} ---')
-    version = release = revision = None
+
+    region_data = dictfactory()
+    now = time.gmtime()
 
     for image in images:
-        latest = data[region]['latest']     # shortcut
+        latest = region_data[region]['latest']     # shortcut
 
         # information about the image
         id = image.id
@@ -150,7 +151,7 @@ for region in sorted(regions):
             # TODO: when did we start setting deprecation time?
 
         # keep track of images
-        data[region]['images'][id] = {
+        region_data[region]['images'][id] = {
             'name': name,
             'release': release,
             'version': version,
@@ -168,14 +169,29 @@ for region in sorted(regions):
         }
 
         # keep track of the latest release_key per variant_key
-        if variant_key not in latest or (release > latest[variant_key]['release']) or (release == latest[variant_key]['release'] and [revision > latest[variant_key]['revision']]):
-            data[region]['latest'][variant_key] = {
+        if variant_key not in latest or (
+            release > latest[variant_key]['release']
+        ) or (
+            release == latest[variant_key]['release'] and revision > latest[variant_key]['revision']
+        ):
+            region_data[region]['latest'][variant_key] = {
                 'release': release,
                 'revision': revision,
                 'release_key': release_key
             }
 
         log.info(f'{region}\t{not image.public}\t{eol}\t{last_launched.split("T")[0]}\t{name}')
+
+    return region, undictfactory(region_data)
+
+
+data = {}
+
+with ThreadPoolExecutor(max_workers=args.parallel) as pool:
+    futures = {pool.submit(collect_region, region): region for region in sorted(regions)}
+    for fut in as_completed(futures):
+        region, region_data = fut.result()
+        data[region] = region_data[region]
 
 # instantiate YAML
 yaml = YAML()

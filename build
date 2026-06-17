@@ -42,8 +42,10 @@ from subprocess import Popen, PIPE
 from urllib.request import urlopen
 
 import clouds
+from apkovl_bootstrap import ApkovlBootstrap
 from alpine import Alpine
 from image_config_manager import ImageConfigManager
+from qemu_boot import QemuBoot
 
 
 ### Constants & Variables
@@ -206,6 +208,21 @@ def install_qemu_firmware():
             subprocess.run(['truncate', '-s', '67108864', firm_bin])
 
 
+def install_qemu_bootstrap():
+    if os.path.isdir('work/apkovl') and os.path.isdir('work/ssh'):
+        log.info('Using existing QEMU SSH bootstrap in work environment')
+    else:
+        log.info('Installing QEMU SSH bootstrap in work environment')
+        ApkovlBootstrap('work').prepare(force_apkovl=False)
+
+    boot = QemuBoot('work', alpine=alpine)
+    if os.path.isdir(boot.boot_dir):
+        log.info('Using existing QEMU boot artifacts in work environment')
+    else:
+        log.info('Installing QEMU boot artifacts in work environment')
+        boot.install(UEFI_FIRMWARE.keys())
+
+
 ### Command Line & Logging
 
 parser = argparse.ArgumentParser(
@@ -312,7 +329,8 @@ if not image_configs.refresh_state(
 if args.step == 'state':
     sys.exit(0)
 
-# install firmware if missing
+# install QEMU bootstrap and firmware if missing
+install_qemu_bootstrap()
 install_qemu_firmware()
 
 ### Build/Import/Publish with Packer

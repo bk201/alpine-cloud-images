@@ -35,7 +35,7 @@ variable "qemu" {
     }
     cmd_wait    = "5s"
     ssh_timeout = "1m"
-    memory      = 1024  # MiB
+    memory      = 1024 # MiB
   }
 }
 
@@ -47,15 +47,18 @@ locals {
     "local", "upload", "import", "sign", "publish", "release"
   ]
 
-  debug_arg   = var.DEBUG == 0 ? "" : "--debug"
-  broker_arg  = var.USE_BROKER == 0 ? "" : "--use-broker"
+  debug_arg       = var.DEBUG == 0 ? "" : "--debug"
+  broker_arg      = var.USE_BROKER == 0 ? "" : "--use-broker"
   not-regions_arg = var.NOT_REGIONS == null ? "" : "--not-regions ${var.NOT_REGIONS}"
 
-  # randomly generated password
-  password = uuidv4()
+  qemu_append_modules = "loop,squashfs,sd-mod,usb-storage,virtio_net,virtio_pci,virtio_blk,ext4,fat,vfat,nls_cp437,nls_iso8859-1,nls_utf8"
+  qemu_console = {
+    aarch64 = "ttyAMA0"
+    x86_64  = "ttyS0"
+  }
 
   # resolve actionable build configs
-  configs = { for b, cfg in yamldecode(file("work/images.yaml")):
+  configs = { for b, cfg in yamldecode(file("work/images.yaml")) :
     b => cfg if contains(keys(cfg), "actions")
   }
 }
@@ -70,25 +73,18 @@ source null alpine {
 # Common to all QEMU builds
 source qemu alpine {
   # qemu machine
-  headless          = true
-  memory            = var.qemu.memory
-  net_device        = "virtio-net"
-  disk_interface    = "virtio"
+  headless       = true
+  memory         = var.qemu.memory
+  net_device     = "virtio-net"
+  disk_interface = "virtio"
 
   # build environment
-  boot_command = [
-    "root<enter>",
-    "setup-interfaces<enter><enter><enter><enter><enter>",
-    "ifup eth0<enter><wait${var.qemu.cmd_wait}>",
-    "setup-sshd openssh<enter><wait${var.qemu.cmd_wait}>",
-    "echo PermitRootLogin yes >> /etc/ssh/sshd_config<enter>",
-    "service sshd restart<enter>",
-    "echo 'root:${local.password}' | chpasswd<enter>",
-  ]
-  ssh_username      = "root"
-  ssh_password      = local.password
-  ssh_timeout       = var.qemu.ssh_timeout
-  shutdown_command  = "poweroff"
+  boot_command         = []
+  http_directory       = "work/apkovl"
+  ssh_username         = "root"
+  ssh_private_key_file = "work/ssh/packer_ed25519"
+  ssh_timeout          = var.qemu.ssh_timeout
+  shutdown_command     = "poweroff"
 }
 
 build {
@@ -98,41 +94,51 @@ build {
 
   # QEMU builder
   dynamic "source" {
-    for_each = { for b, c in local.configs:
-        b => c if contains(c.actions, "local")
-      }
+    for_each = { for b, c in local.configs :
+      b => c if contains(c.actions, "local")
+    }
     iterator = B
-    labels = ["qemu.alpine"]  # links us to the base source
+    labels   = ["qemu.alpine"] # links us to the base source
 
     content {
       name = B.key
 
       # qemu machine
-      qemu_binary   = "qemu-system-${B.value.arch}"
-      qemuargs      = B.value.qemu.args
-      machine_type  = B.value.qemu.machine_type
-      firmware      = B.value.qemu.firmware
+      qemu_binary = "qemu-system-${B.value.arch}"
+      qemuargs = concat(
+        coalesce(B.value.qemu.args, []),
+        [
+          ["-kernel", "work/boot/latest-${B.value.arch}/vmlinuz-virt"],
+          ["-initrd", "work/boot/latest-${B.value.arch}/initramfs-virt"],
+          [
+            "-append",
+            "modules=${local.qemu_append_modules} console=${local.qemu_console[B.value.arch]} ip=dhcp apkovl=http://{{ .HTTPIP }}:{{ .HTTPPort }}/packer.apkovl.tar.gz"
+          ],
+        ],
+      )
+      machine_type = B.value.qemu.machine_type
+      firmware     = B.value.qemu.firmware
 
       # build environment
-      iso_url       = B.value.qemu.iso_url
-      iso_checksum  = "file:${B.value.qemu.iso_url}.sha512"
-      boot_wait     = var.qemu.boot_wait[B.value.arch]
+      iso_url      = "work/boot/latest-${B.value.arch}/alpine-virt.iso"
+      iso_checksum = "file:work/boot/latest-${B.value.arch}/alpine-virt.iso.sha512"
+      boot_wait    = var.qemu.boot_wait[B.value.arch]
 
       # results
-      output_directory  = "work/images/${B.value.cloud}/${B.value.image_key}"
-      disk_size         = B.value.disk_size
-      format            = "qcow2"
-      vm_name           = "image.qcow2"
+      output_directory = "work/images/${B.value.cloud}/${B.value.image_key}"
+      disk_size        = B.value.disk_size
+      format           = "qcow2"
+      vm_name          = "image.qcow2"
     }
   }
 
   # Null builder (don't build, but we might do other actions)
   dynamic "source" {
-    for_each = { for b, c in local.configs:
-        b => c if !contains(c.actions, "local")
-      }
+    for_each = { for b, c in local.configs :
+      b => c if !contains(c.actions, "local")
+    }
     iterator = B
-    labels = ["null.alpine"]
+    labels   = ["null.alpine"]
     content {
       name = B.key
     }
@@ -142,30 +148,30 @@ build {
 
   # install setup files
   dynamic "provisioner" {
-    for_each = { for b, c in local.configs:
-        b => c if contains(c.actions, "local")
-      }
+    for_each = { for b, c in local.configs :
+      b => c if contains(c.actions, "local")
+    }
     iterator = B
-    labels = ["file"]
+    labels   = ["file"]
     content {
-      only = [ "qemu.${B.key}" ]  # configs specific to one build
+      only = ["qemu.${B.key}"] # configs specific to one build
 
-      sources     = [ for d in B.value.script_dirs: "work/scripts/${d}" ]
+      sources     = [for d in B.value.script_dirs : "work/scripts/${d}"]
       destination = "/tmp/"
     }
   }
 
   # run setup scripts
   dynamic "provisioner" {
-    for_each = { for b, c in local.configs:
-        b => c if contains(c.actions, "local")
-      }
+    for_each = { for b, c in local.configs :
+      b => c if contains(c.actions, "local")
+    }
     iterator = B
-    labels = ["shell"]
+    labels   = ["shell"]
     content {
-      only = [ "qemu.${B.key}" ]  # configs specific to one build
+      only = ["qemu.${B.key}"] # configs specific to one build
 
-      scripts = [ for s in B.value.scripts: "work/scripts/${s}" ]
+      scripts          = [for s in B.value.scripts : "work/scripts/${s}"]
       use_env_var_file = true
       environment_vars = [
         "DEBUG=${var.DEBUG}",
@@ -201,14 +207,14 @@ build {
 
   # import and/or publish cloud images
   dynamic "post-processor" {
-    for_each = { for b, c in local.configs:
-       b => c if length(setintersection(c.actions, local.actions)) > 0
+    for_each = { for b, c in local.configs :
+      b => c if length(setintersection(c.actions, local.actions)) > 0
     }
     iterator = B
-    labels = ["shell-local"]
+    labels   = ["shell-local"]
     content {
-      only = [ "qemu.${B.key}", "null.${B.key}" ]
-      inline = [ for action in local.actions:
+      only = ["qemu.${B.key}", "null.${B.key}"]
+      inline = [for action in local.actions :
         "./cloud_helper.py ${action} ${local.debug_arg} ${local.broker_arg} ${local.not-regions_arg} ${B.key}" if contains(B.value.actions, action)
       ]
     }

@@ -1,9 +1,12 @@
 # vim: ts=4 et:
 
 import mergedeep
+import math
 import os
 import pyhocon
 import shutil
+import shlex
+import tarfile
 
 from copy import deepcopy
 from datetime import datetime
@@ -18,9 +21,8 @@ class ImageConfig():
 
     CONVERT_CMD = {
         'qcow2': 'ln -f {opts} {src} {dst}',
-        'vhd': 'qemu-img convert -f qcow2 -O vpc {opts} {src} {dst}',
-        # NOTE: resizes to 1G,
-        'raw.tar.gz' : 'qemu-img convert -f qcow2 -O raw {opts} {src} disk.raw && qemu-img resize -f raw disk.raw 1G && gtar --format=oldgnu -zcvf {dst} disk.raw && rm disk.raw'
+        # NOTE: raw.tar.gz is handled explicitly in convert_image().
+        'vhd': 'qemu-img convert -f qcow2 -O vpc {opts} {src} {dst}'
     }
     CONVERT_OPTS = {
         None: '',
@@ -187,6 +189,9 @@ class ImageConfig():
 
     def _resolve_disk_size(self):
         self.disk_size = str(sum(self.disk_size)) + 'M'
+
+    def _raw_tar_gz_resize(self):
+        return f"{max(1, math.ceil(int(self.disk_size[:-1]) / 1024))}G"
 
     def _resolve_motd(self):
         # merge release notes, as apporpriate
@@ -414,12 +419,32 @@ class ImageConfig():
     # convert local QCOW2 to format appropriate for a cloud
     def convert_image(self):
         self._log.info('Converting %s to %s', self.local_image, self.image_path)
-        run(
-            self.CONVERT_CMD[self.image_format].format(opts=self.convert_opts, src=self.local_image, dst=self.image_path),
-            log=self._log, errmsg='Unable to convert %s to %s',
-            errvals=[self.local_image, self.image_path],
-            shell=True
-        )
+        if self.image_format == 'raw.tar.gz':
+            raw = self.local_dir / 'disk.raw'
+            opts = shlex.split(self.convert_opts)
+            try:
+                run(
+                    ['qemu-img', 'convert', '-f', 'qcow2', '-O', 'raw', *opts, self.local_image, raw],
+                    log=self._log, errmsg='Unable to convert %s to raw',
+                    errvals=[self.local_image]
+                )
+                run(
+                    ['qemu-img', 'resize', '-f', 'raw', raw, self._raw_tar_gz_resize()],
+                    log=self._log, errmsg='Unable to resize raw image %s',
+                    errvals=[raw]
+                )
+                self._log.debug('Archiving raw image %s to %s', raw, self.image_path)
+                with tarfile.open(self.image_path, "w:gz", format=tarfile.GNU_FORMAT) as tar:
+                    tar.add(raw, arcname=raw.name)
+            finally:
+                raw.unlink(missing_ok=True)
+        else:
+            run(
+                self.CONVERT_CMD[self.image_format].format(opts=self.convert_opts, src=self.local_image, dst=self.image_path),
+                log=self._log, errmsg='Unable to convert %s to %s',
+                errvals=[self.local_image, self.image_path],
+                shell=True
+            )
         #self._save_checksum(self.image_path)
         self.built = datetime.utcnow().isoformat()
 

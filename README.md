@@ -11,12 +11,12 @@ own customized images.
 To get started with offical pre-built Alpine Linux cloud images, visit
 https://alpinelinux.org/cloud.  Currently, we build official images for the
 following cloud platforms...
+* Generic (autodetected, based on what boostrap system supports)
 * Amazon Web Services (AWS)
 * Microsoft Azure
 * GCP (Google Cloud Platform)
-* OCI (Oracle Cloud Infrastructure)
-* NoCloud
-* Generic (autodetected, based on what boostrap system supports)
+
+Please use **Generic** images for **NoCloud** or **OCI** images.  Both are autodetected by Tiny Cloud and cloud-init, and both use the same QCOW2 format as the Generic images.
 
 Each image's name contains the Alpine version release, architecture, firmware,
 bootstrap, and image revision; a YAML metadata file containing these details
@@ -120,6 +120,7 @@ usage: build [-h] [--debug] [--clean] [--pad-uefi-bin-arch ARCH [ARCH ...]]
          [--custom DIR [DIR ...]] [--skip KEY [KEY ...]] [--only KEY [KEY ...]]
          [--revise] [--use-broker] [--no-color] [--parallel N]
          [--vars FILE [FILE ...]] [--disable STEP [STEP] ...]
+         [--not-regions REGION [REGION ...]]
          {configs,state,rollback,local,upload,import,sign,publish,release}
 
 positional arguments:   (build up to and including this step)
@@ -150,6 +151,8 @@ optional arguments:
   --parallel N              build N images in parallel
   --vars FILE [FILE ...]    supply Packer with -vars-file(s) (default: [])
   --disable STEP [STEP ...] disable optional steps (default: [])
+  --not-regions REGION [REGION ...]
+                            don't publish to these regions
 ```
 
 The `build` script will automatically create a `work/` directory containing a
@@ -157,6 +160,11 @@ Python virtual environment if one does not already exist.  This directory also
 hosts other data related to building images.  The `--clean` argument will
 remove everything in the `work/` directory except for things related to the
 Python virtual environment.
+
+Local QEMU builds also cache builder VM boot assets in `work/boot/`, an
+apkovl used to bootstrap SSH in `work/apkovl/`, and the generated SSH key in
+`work/ssh/`.  These are reused across build sessions until `--clean` removes
+them.
 
 If `work/configs/` or `work/scripts/` directories do not yet exist, they will
 be populated with the base configuration and scripts from `configs/` and/or
@@ -198,6 +206,10 @@ built locally or have already been imported.  Images are converted to formats
 amenable for import into the cloud provider (if necessary) and checksums are
 generated.
 
+QEMU builders boot the latest available Alpine virt ISO kernel and initramfs
+directly, using an apkovl served by Packer's HTTP server to enable SSH for
+provisioning.  This avoids relying on Packer typing boot commands over VNC.
+
 The `upload` step uploads the local image, checksum, and metadata to the
 defined `storage_url`.  The `import`, `publish`, and `release` steps will
 also upload updated image metadata.
@@ -214,6 +226,9 @@ if they haven't already been copied there.  This step will always update
 image permissions, descriptions, tags, and deprecation date (if applicable)
 in all regions where the image has been published.
 
+The `--not-regions` argument can be used to exclude regions from publish
+operations.
+
 ***NOTE:***  The `import` and `publish` steps are skipped for those cloud
 providers where this does not make sense (i.e.  NoCloud) or for those which
 it has not yet been coded.
@@ -227,6 +242,17 @@ the image data to a format that can be used by https://alpinelinux.org/cloud.)_
 
 This script is meant to be called only by Packer from its `post-processor`
 block.
+
+### Image Cache and Pruning Helpers
+
+The experimental `get-image-cache.py` helper queries cloud images and emits a
+YAML cache for `prune-images.py`.  Its `--parallel N` option queries up to `N`
+regions concurrently.
+
+The experimental `prune-images.py` helper reads that cache, reports which
+images match the requested prune criteria, and only deletes images when
+`--really` is specified and confirmed.  Its `--parallel N` option prunes up to
+`N` regions concurrently during the deletion phase.
 
 ----
 ## Build Configuration

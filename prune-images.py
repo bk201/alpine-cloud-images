@@ -32,6 +32,7 @@ import logging
 import re
 import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from ruamel.yaml import YAML
 from pathlib import Path
 
@@ -71,6 +72,7 @@ parser.add_argument('--debug', action='store_true', help='enable debug output')
 parser.add_argument('--really', action='store_true', help='really prune images')
 parser.add_argument('--cloud', choices=CLOUDS, required=True, help='cloud provider')
 parser.add_argument('--region', help='specific region, instead of all regions')
+parser.add_argument('--parallel', metavar='N', type=int, default=1, help='prune N regions in parallel')
 parser.add_argument(
     '--not-regions', nargs="+", metavar='REGION', default=[], help="don't publish to these regions"
 )
@@ -129,7 +131,6 @@ yaml = YAML()
 log.info(f'loading image cache from {args.cache_file}')
 cache = yaml.load(Path(args.cache_file))
 log.info(f'loaded image cache')
-
 
 for region in sorted(regions):
     latest = cache[region]['latest']
@@ -222,9 +223,7 @@ if not args.really:
     log.warning("Not really pruning any images.")
     exit(0)
 
-# do the pruning...
-
-for region, images in sorted(removes.items()):
+def prune_region(region, images):
     ec2r = clouds.ADAPTERS[args.cloud].session(region).resource('ec2')
     for id, image in images.items():
         name = image['name']
@@ -237,6 +236,16 @@ for region, images in sorted(removes.items()):
 
         except Exception as e:
             log.warning(f"Failed: {e}")
-            pass
+
+
+# do the pruning...
+
+with ThreadPoolExecutor(max_workers=args.parallel) as pool:
+    futures = [
+        pool.submit(prune_region, region, images)
+        for region, images in sorted(removes.items())
+    ]
+    for fut in as_completed(futures):
+        fut.result()
 
 log.info('DONE')
